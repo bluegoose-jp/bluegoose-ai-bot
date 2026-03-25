@@ -2,3 +2,4 @@ slack-bolt
 flask
 notion-client
 anthropic
+requests
