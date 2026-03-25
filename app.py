@@ -2,7 +2,7 @@ import os
 from slack_bolt import App
 from slack_bolt.adapter.flask import SlackRequestHandler
 from flask import Flask, request
-from notion_client import Client as NotionClient
+import requests
 import anthropic
 
 SLACK_BOT_TOKEN = os.environ["SLACK_BOT_TOKEN"]
@@ -11,21 +11,27 @@ NOTION_TOKEN = os.environ["NOTION_TOKEN"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 
 slack_app = App(token=SLACK_BOT_TOKEN, signing_secret=SLACK_SIGNING_SECRET)
-notion = NotionClient(auth=NOTION_TOKEN)
 anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 flask_app = Flask(__name__)
 handler = SlackRequestHandler(slack_app)
 
 def search_notion(query):
-    results = notion.search(query=query, filter={"property": "object", "value": "page"})
+    headers = {
+        "Authorization": f"Bearer {NOTION_TOKEN}",
+        "Content-Type": "application/json",
+        "Notion-Version": "2022-06-28"
+    }
+    data = {"query": query, "filter": {"property": "object", "value": "page"}}
+    res = requests.post("https://api.notion.com/v1/search", headers=headers, json=data)
+    results = res.json().get("results", [])
     texts = []
-    for page in results["results"][:3]:
+    for page in results[:3]:
         page_id = page["id"]
-        blocks = notion.blocks.children.list(block_id=page_id)
-        for block in blocks["results"]:
+        blocks_res = requests.get(f"https://api.notion.com/v1/blocks/{page_id}/children", headers=headers)
+        blocks = blocks_res.json().get("results", [])
+        for block in blocks:
             if block["type"] == "paragraph":
-                rich_text = block["paragraph"].get("rich_text", [])
-                for rt in rich_text:
+                for rt in block["paragraph"].get("rich_text", []):
                     texts.append(rt.get("plain_text", ""))
     return "\n".join(texts[:3000])
 
@@ -40,7 +46,6 @@ def handle_mention(event, say):
 {notion_context}
 
 質問：{user_question}"""
-    
     response = anthropic_client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=1000,
