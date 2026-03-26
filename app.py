@@ -1,16 +1,19 @@
 import os
 from slack_bolt import App
-from slack_bolt.adapter.socket_mode import SocketModeHandler
+from slack_bolt.adapter.flask import SlackRequestHandler
+from flask import Flask, request
 import requests
 import anthropic
 
 SLACK_BOT_TOKEN = os.environ["SLACK_BOT_TOKEN"]
-SLACK_APP_TOKEN = os.environ["SLACK_APP_TOKEN"]
+SLACK_SIGNING_SECRET = os.environ["SLACK_SIGNING_SECRET"]
 NOTION_TOKEN = os.environ["NOTION_TOKEN"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 
-app = App(token=SLACK_BOT_TOKEN)
+app = App(token=SLACK_BOT_TOKEN, signing_secret=SLACK_SIGNING_SECRET)
 anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+flask_app = Flask(__name__)
+handler = SlackRequestHandler(app)
 
 def search_notion(query):
     headers = {
@@ -50,6 +53,9 @@ def handle_mention(event, say):
     )
     say(response.content[0].text)
 
+@flask_app.route("/slack/events", methods=["POST"])
+def slack_events():
+    return handler.handle(request)
+
 if __name__ == "__main__":
-    handler = SocketModeHandler(app, SLACK_APP_TOKEN)
-    handler.start()
+    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 3000)))
