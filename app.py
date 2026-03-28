@@ -112,9 +112,3 @@ def slack_events():
 if __name__ == "__main__":
     flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 3000)))
 ```
-
-**次にRailwayで環境変数を追加します。**
-
-RailwayのダッシュボードでVariablesに以下を追加してください：
-```
-SCREENPIPE_DATABASE_ID = 3310bee0500880bba932c0b2f470197f
