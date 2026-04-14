@@ -25,35 +25,52 @@ def get_client_list():
         "Content-Type": "application/json",
         "Notion-Version": "2022-06-28"
     }
+    CLIENT_MASTER_DB_ID = os.environ.get("CLIENT_MASTER_DB_ID", "")
+
+    if not CLIENT_MASTER_DB_ID:
+        return _fallback_client_list()
+
     data = {
-        "query": "クライアント別SOP",
-        "filter": {"property": "object", "value": "page"}
+        "filter": {
+            "property": "契約ステータス",
+            "select": {"equals": "現行契約中"}
+        }
     }
-    res = requests.post("https://api.notion.com/v1/search", headers=headers, json=data)
+    res = requests.post(
+        f"https://api.notion.com/v1/databases/{CLIENT_MASTER_DB_ID}/query",
+        headers=headers,
+        json=data
+    )
     pages = res.json().get("results", [])
 
     clients = []
     for page in pages:
-        for prop in page.get("properties", {}).values():
+        props = page.get("properties", {})
+        name = ""
+        for prop in props.values():
             if prop.get("type") == "title":
                 title_list = prop.get("title", [])
                 if title_list:
                     name = title_list[0].get("plain_text", "").strip()
-                    if name:
-                        clients.append(f"- {name}")
+        agency = ""
+        agency_prop = props.get("紹介元（代理店）", {})
+        if agency_prop.get("type") == "select" and agency_prop.get("select"):
+            agency = agency_prop["select"].get("name", "直接")
+        if name:
+            suffix = f"（{agency}経由）" if agency and agency != "直接" else ""
+            clients.append(f"- {name}{suffix}")
 
-    if not clients:
-        # Notionから取得できない場合のフォールバック
-        return """- SteelSeries
+    return "\n".join(clients) if clients else _fallback_client_list()
+
+
+def _fallback_client_list():
+    return """- SteelSeries
 - STEAMS LAB JAPAN（SLJ）
-- 尾張まるはち（OM）
+- 尾張まるはち
 - スカイル（旧ロジェールジャパン）
-- Pipelines
-- Belkin
-- UTプロダクツ
-- 丸平かつおぶし"""
-
-    return "\n".join(clients)
+- Pipelines（ECのプロ経由）
+- UTプロダクツ（D-innovation経由）
+- 丸平かつおぶし（D-innovation経由）"""
 
 
 # ========================================
@@ -77,6 +94,15 @@ def build_company_context():
 - 最終目標2：クライアントワーク（顧客折衝・定例MTG・戦略提案）を将来採用する人間に移譲
 - マニュアルはNotionに蓄積し、このBotも参照する
 - AIインフラ：Claude（主要AI）＋Notion＋Slack＋GAS＋Screenpipe＋Railway/Flask
+
+【営業代理店】
+- ECのプロ：Pipelines を紹介
+- D-innovation：UTプロダクツ、丸平かつおぶし を紹介
+- シナジックスマーケティング：今後クライアント紹介予定
+
+【契約終了クライアント】
+- Belkin（直接契約・契約終了）
+※契約終了クライアントの情報が出てきた場合、「現在は契約終了しているクライアントです」と明示すること
 
 【回答方針】
 - 日本語で回答すること
